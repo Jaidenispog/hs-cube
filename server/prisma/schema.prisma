@@ -1,0 +1,82 @@
+// OneStack API data model.
+//
+// SQLite for local dev — a file you own. To deploy on Postgres, change `provider` to "postgresql" and
+// point DATABASE_URL at your database; the models below are portable as-is.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A tenant is one workshop/business. Every row of real data belongs to exactly one tenant, and the API
+/// scopes every query to the tenant on the caller's token.
+model Tenant {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  users     User[]
+  entries   TimeEntry[]
+  contacts  Contact[]
+  workItems WorkItem[]
+}
+
+model User {
+  id           String      @id @default(cuid())
+  tenantId     String
+  email        String      @unique
+  passwordHash String
+  role         String // 'OWNER' | 'STAFF'
+  createdAt    DateTime    @default(now())
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries      TimeEntry[]
+
+  @@index([tenantId])
+}
+
+/// One clock-in → clock-out shift. `checkInLat/Lng/Accuracy` capture where the shift started, sent by the
+/// mobile app on check-in (best-effort — they may be null when the device has no/denied location).
+model TimeEntry {
+  id              String    @id @default(cuid())
+  tenantId        String
+  userId          String
+  clockInAt       DateTime  @default(now())
+  clockOutAt      DateTime?
+  minutes         Int?
+  checkInLat      Float?
+  checkInLng      Float?
+  checkInAccuracy Float?
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  tenantId    String
+  displayName String
+  email       String?
+  phone       String?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model WorkItem {
+  id              String   @id @default(cuid())
+  tenantId        String
+  type            String   @default("job")
+  reference       String
+  stateName       String
+  workflowVersion Int      @default(1)
+  assignees       String   @default("[]") // JSON array of userIds (SQLite has no array type)
+  createdAt       DateTime @default(now())
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
