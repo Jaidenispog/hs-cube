@@ -1,0 +1,37 @@
+# Fly.io config for the OneStack API. `fly launch` will offer to rename the app and pick a region.
+# SQLite lives on the mounted volume at /data, so data persists across restarts and redeploys.
+app = "onestack-api"
+primary_region = "syd"
+
+[build]
+
+[env]
+  PORT = "3001"
+  DATABASE_URL = "file:/data/prod.db"
+  # Enables /auth/dev-login + demo accounts so you can log in immediately. Turn OFF for real use.
+  DEV_LOGIN_ENABLED = "true"
+  # NOTE: set a real JWT secret out-of-band:  fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # SQLite is single-writer, so keep this a single machine (don't scale to multiple).
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/api/v1/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+
+# Persistent volume for the SQLite database. Create it once (see server/README.md) before the first deploy.
+[mounts]
+  source = "onestack_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

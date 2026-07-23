@@ -81,7 +81,14 @@ export class TimeClockService {
 
   async summary(tenantId: string) {
     const users = await this.prisma.user.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
-    const result = [];
+    const result: {
+      userId: string;
+      role: string;
+      totalMinutes: number;
+      sessions: number;
+      onClock: boolean;
+      lastClockInAt: string | null;
+    }[] = [];
     for (const u of users) {
       const es = await this.prisma.timeEntry.findMany({ where: { tenantId, userId: u.id } });
       const totalMinutes = es.reduce((sum, e) => sum + (e.minutes ?? 0), 0);

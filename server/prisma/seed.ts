@@ -7,6 +7,15 @@ const prisma = new PrismaClient();
 const TENANT_ID = 'demo-tenant';
 
 async function main() {
+  // Safe to run on every deploy: seed only when the database is empty, unless FORCE_RESEED=1.
+  // (The steps below delete + recreate demo rows, which would wipe real data on a restart otherwise.)
+  const existingUsers = await prisma.user.count();
+  if (existingUsers > 0 && process.env.FORCE_RESEED !== '1') {
+    // eslint-disable-next-line no-console
+    console.log('Seed skipped — data already present (set FORCE_RESEED=1 to reseed).');
+    return;
+  }
+
   const passwordHash = await bcrypt.hash('demo1234', 10);
 
   const tenant = await prisma.tenant.upsert({

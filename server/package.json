@@ -9,9 +9,10 @@
     "build": "tsc -p tsconfig.json",
     "start:prod": "node dist/main.js",
     "db:push": "prisma db push",
-    "db:reset": "prisma db push --force-reset",
+    "db:reset": "prisma db push --force-reset && ts-node prisma/seed.ts",
     "seed": "ts-node prisma/seed.ts",
     "setup": "prisma generate && prisma db push && ts-node prisma/seed.ts",
+    "start:prod": "prisma db push --skip-generate && ts-node prisma/seed.ts && node dist/main.js",
     "postinstall": "prisma generate"
   },
   "prisma": {

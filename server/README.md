@@ -45,7 +45,38 @@ login screen) and check in — your location is written to your own SQLite datab
 `prisma/schema.prisma`. To deploy on Postgres, switch the datasource `provider` to `postgresql` and point
 `DATABASE_URL` at your database — the models are portable as-is.
 
+## Deploy (Fly.io — SQLite on a volume, public URL)
+
+The repo ships a `Dockerfile` and `fly.toml`. Fly builds the image remotely, so you don't need Docker
+installed — just the Fly CLI and a (free) Fly account. From `server/`:
+
+```bash
+# one-time
+brew install flyctl              # or: curl -L https://fly.io/install.sh | sh
+fly auth signup                  # or: fly auth login
+fly launch --copy-config --no-deploy   # names the app + region; keeps the provided fly.toml
+
+# persistent database volume (once), then set a real secret, then deploy
+fly volumes create onestack_data --size 1 --region syd
+fly secrets set JWT_SECRET=$(openssl rand -hex 32)
+fly deploy
+```
+
+`fly deploy` prints your URL, e.g. `https://<your-app>.fly.dev`. Check it:
+
+```bash
+curl https://<your-app>.fly.dev/api/v1/health          # → {"ok":true,...}
+```
+
+Point the mobile app at it (app repo root `.env`): `EXPO_PUBLIC_API_BASE_URL=https://<your-app>.fly.dev/api/v1`.
+Log in with a seed account and check in — data is written to the SQLite volume, which survives redeploys.
+
+**Other hosts:** the same `Dockerfile` runs anywhere. For stateless hosts (Cloud Run, Render free) SQLite
+won't persist — switch Prisma's datasource to `postgresql`, point `DATABASE_URL` at a managed Postgres, and
+deploy the same image. Ask and I'll add that config.
+
 ## Notes
 
 - `DEV_LOGIN_ENABLED=true` enables `/auth/dev-login` and `/auth/demo-credentials`. Unset it in production.
-- Change `JWT_SECRET` for anything but local dev.
+- Change `JWT_SECRET` for anything but local dev (on Fly: `fly secrets set JWT_SECRET=...`).
+- SQLite is single-writer — keep it to one machine (the provided `fly.toml` does). Move to Postgres to scale out.
