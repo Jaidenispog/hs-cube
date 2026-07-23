@@ -18,15 +18,10 @@ import {
 } from '@/components/kit';
 import { Radius, Shadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import {
-  coordsToPayload,
-  formatCoords,
-  geoReasonLabel,
-  getCheckInLocation,
-  type GeoResult,
-} from '@/lib/location';
+import { formatCoords, geoReasonLabel, type GeoResult } from '@/lib/location';
+import { checkInWithLocation, checkOut } from '@/lib/time-clock';
 import { useQuery } from '@/lib/use-query';
 import { hoursLabel, type ClockStatus, type WorkItem } from '@/lib/types';
 
@@ -48,6 +43,7 @@ export default function EmployeeHome() {
   const [busy, setBusy] = useState(false);
   // The location captured on the most recent check-in (cleared on check-out).
   const [lastGeo, setLastGeo] = useState<GeoResult | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
 
   const clock = useQuery<ClockStatus>(() => api.get<ClockStatus>('/time-clock/status'), []);
   const jobs = useQuery<WorkItem[]>(() => api.get<WorkItem[]>('/work-items?type=job'), []);
@@ -64,17 +60,20 @@ export default function EmployeeHome() {
 
   const toggleClock = async () => {
     setBusy(true);
+    setActionErr(null);
     try {
       if (onClock) {
-        await api.post('/time-clock/check-out');
+        await checkOut();
         setLastGeo(null);
       } else {
-        // Capture position first (best-effort) so check-in records where the shift started.
-        const geo = await getCheckInLocation();
+        // Set the captured location only after check-in resolves, so a failed check-in never shows a
+        // "location recorded" line.
+        const geo = await checkInWithLocation();
         setLastGeo(geo);
-        await api.post('/time-clock/check-in', geo.ok ? { location: coordsToPayload(geo.coords) } : undefined);
       }
       clock.reload();
+    } catch (e) {
+      setActionErr(e instanceof ApiError ? e.message : 'Check-in failed');
     } finally {
       setBusy(false);
     }
@@ -135,8 +134,13 @@ export default function EmployeeHome() {
             themeColor={lastGeo.ok ? (lastGeo.source === 'override' ? 'accent' : 'success') : 'muted'}
           >
             {lastGeo.ok
-              ? `📍 ${lastGeo.source === 'override' ? 'Set location' : 'On-site'} · ${formatCoords(lastGeo.coords)}`
+              ? `📍 ${lastGeo.source === 'override' ? 'Set location' : 'Location recorded'} · ${formatCoords(lastGeo.coords)}`
               : `📍 ${geoReasonLabel(lastGeo.reason)} — checked in without location`}
+          </ThemedText>
+        ) : null}
+        {actionErr ? (
+          <ThemedText type="small" themeColor="danger">
+            {actionErr}
           </ThemedText>
         ) : null}
       </Card>

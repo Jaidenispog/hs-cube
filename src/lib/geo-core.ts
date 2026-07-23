@@ -133,12 +133,15 @@ export function readGeolocation(
   const { timeoutMs = 10000, maximumAgeMs = 0, highAccuracy = true } = opts;
   return new Promise<GeoResult>((resolve) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const done = (result: GeoResult) => {
-      if (!settled) {
-        settled = true;
-        resolve(result);
-      }
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(result);
     };
+    // Self-owned backstop so we never depend solely on the platform honouring its own `timeout`.
+    timer = setTimeout(() => done({ ok: false, reason: 'timeout' }), timeoutMs + 1000);
     try {
       geo.getCurrentPosition(
         (position) => {

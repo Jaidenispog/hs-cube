@@ -24,7 +24,13 @@ export { coordsToPayload, formatCoords, geoReasonLabel } from './geo-core';
  *   • call `setLocationOverride({ latitude, longitude, accuracy: null })` at runtime.
  */
 
-let override: Coords | null = parseCoordString(process.env.EXPO_PUBLIC_MOCK_LOCATION);
+/** How long to wait for a native GPS fix before checking in without one. */
+const NATIVE_TIMEOUT_MS = 10000;
+
+// Only honour the env-baked override outside production — a release build must never ship a forced
+// location (EXPO_PUBLIC_* is inlined into the bundle). Use it via `expo start`, not a release build.
+const isDev = process.env.NODE_ENV !== 'production';
+let override: Coords | null = isDev ? parseCoordString(process.env.EXPO_PUBLIC_MOCK_LOCATION) : null;
 
 /** Force every check-in to use these coordinates (pass `null` to clear and go back to real GPS). */
 export function setLocationOverride(coords: Coords | null): void {
@@ -54,7 +60,12 @@ export async function getCheckInLocation(): Promise<GeoResult> {
     const Location = await import('expo-location');
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return { ok: false, reason: 'denied' };
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    // Bound the GPS acquisition so a slow/failing fix can't hang the check-in button indefinitely.
+    const position = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), NATIVE_TIMEOUT_MS)),
+    ]);
+    if (!position) return { ok: false, reason: 'timeout' };
     const coords = normalizeCoords({
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,

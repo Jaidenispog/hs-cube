@@ -17,13 +17,8 @@ import {
 import { Spacing } from '@/constants/theme';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import {
-  coordsToPayload,
-  formatCoords,
-  geoReasonLabel,
-  getCheckInLocation,
-  type GeoResult,
-} from '@/lib/location';
+import { formatCoords, geoReasonLabel, type GeoResult } from '@/lib/location';
+import { checkInWithLocation, checkOut } from '@/lib/time-clock';
 import { useQuery } from '@/lib/use-query';
 import { hoursLabel, type ClockStatus, type DirectoryEntry, type StaffTotal, type TimeEntry } from '@/lib/types';
 
@@ -58,13 +53,13 @@ export default function TimeClockScreen() {
     setActionErr(null);
     try {
       if (status?.onClock) {
-        await api.post('/time-clock/check-out');
+        await checkOut();
         setLastGeo(null);
       } else {
-        // Capture position first (best-effort) so check-in records where the shift started.
-        const geo = await getCheckInLocation();
+        // Set the captured location only after check-in resolves, so a failed check-in never shows a
+        // "location recorded" line.
+        const geo = await checkInWithLocation();
         setLastGeo(geo);
-        await api.post('/time-clock/check-in', geo.ok ? { location: coordsToPayload(geo.coords) } : undefined);
       }
       reload();
       reloadEntries();
@@ -112,7 +107,7 @@ export default function TimeClockScreen() {
             themeColor={lastGeo.ok ? (lastGeo.source === 'override' ? 'accent' : 'success') : 'muted'}
           >
             {lastGeo.ok
-              ? `📍 ${lastGeo.source === 'override' ? 'Set location' : 'On-site'} · ${formatCoords(lastGeo.coords)}`
+              ? `📍 ${lastGeo.source === 'override' ? 'Set location' : 'Location recorded'} · ${formatCoords(lastGeo.coords)}`
               : `📍 ${geoReasonLabel(lastGeo.reason)} — checked in without location`}
           </ThemedText>
         ) : null}
