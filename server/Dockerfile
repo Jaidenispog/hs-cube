@@ -10,10 +10,12 @@ RUN apt-get update \
 WORKDIR /app
 
 # Install all deps (dev included — the prisma CLI, ts-node seed, and the tsc build need them).
+# --ignore-scripts skips the postinstall `prisma generate`, which would fail here because the schema
+# isn't copied yet; we run generate explicitly below, once the source (and schema) is present.
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
-# Generate the Prisma client and compile the app.
+# Copy the source, generate the Prisma client (schema now present), and compile the app.
 COPY . .
 RUN npx prisma generate && npm run build
 
