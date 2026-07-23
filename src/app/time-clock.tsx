@@ -17,6 +17,13 @@ import {
 import { Spacing } from '@/constants/theme';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import {
+  coordsToPayload,
+  formatCoords,
+  geoReasonLabel,
+  getCheckInLocation,
+  type GeoResult,
+} from '@/lib/location';
 import { useQuery } from '@/lib/use-query';
 import { hoursLabel, type ClockStatus, type DirectoryEntry, type StaffTotal, type TimeEntry } from '@/lib/types';
 
@@ -43,12 +50,22 @@ export default function TimeClockScreen() {
 
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  // The location captured on the most recent check-in (cleared on check-out).
+  const [lastGeo, setLastGeo] = useState<GeoResult | null>(null);
 
   const toggle = async () => {
     setBusy(true);
     setActionErr(null);
     try {
-      await api.post(status?.onClock ? '/time-clock/check-out' : '/time-clock/check-in');
+      if (status?.onClock) {
+        await api.post('/time-clock/check-out');
+        setLastGeo(null);
+      } else {
+        // Capture position first (best-effort) so check-in records where the shift started.
+        const geo = await getCheckInLocation();
+        setLastGeo(geo);
+        await api.post('/time-clock/check-in', geo.ok ? { location: coordsToPayload(geo.coords) } : undefined);
+      }
       reload();
       reloadEntries();
     } catch (e) {
@@ -89,6 +106,16 @@ export default function TimeClockScreen() {
           loading={busy}
           onPress={toggle}
         />
+        {lastGeo ? (
+          <ThemedText
+            type="small"
+            themeColor={lastGeo.ok ? (lastGeo.source === 'override' ? 'accent' : 'success') : 'muted'}
+          >
+            {lastGeo.ok
+              ? `📍 ${lastGeo.source === 'override' ? 'Set location' : 'On-site'} · ${formatCoords(lastGeo.coords)}`
+              : `📍 ${geoReasonLabel(lastGeo.reason)} — checked in without location`}
+          </ThemedText>
+        ) : null}
         {actionErr ? (
           <ThemedText type="small" themeColor="danger">
             {actionErr}

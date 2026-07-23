@@ -41,6 +41,12 @@
           "cameraPermission": "OneStack needs camera access to take job photos."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "OneStack records where you are when you check in for your shift."
+        }
+      ],
       "expo-font"
     ],
     "experiments": {

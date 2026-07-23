@@ -20,6 +20,13 @@ import { Radius, Shadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import {
+  coordsToPayload,
+  formatCoords,
+  geoReasonLabel,
+  getCheckInLocation,
+  type GeoResult,
+} from '@/lib/location';
 import { useQuery } from '@/lib/use-query';
 import { hoursLabel, type ClockStatus, type WorkItem } from '@/lib/types';
 
@@ -39,6 +46,8 @@ export default function EmployeeHome() {
   const theme = useTheme();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // The location captured on the most recent check-in (cleared on check-out).
+  const [lastGeo, setLastGeo] = useState<GeoResult | null>(null);
 
   const clock = useQuery<ClockStatus>(() => api.get<ClockStatus>('/time-clock/status'), []);
   const jobs = useQuery<WorkItem[]>(() => api.get<WorkItem[]>('/work-items?type=job'), []);
@@ -56,7 +65,15 @@ export default function EmployeeHome() {
   const toggleClock = async () => {
     setBusy(true);
     try {
-      await api.post(onClock ? '/time-clock/check-out' : '/time-clock/check-in');
+      if (onClock) {
+        await api.post('/time-clock/check-out');
+        setLastGeo(null);
+      } else {
+        // Capture position first (best-effort) so check-in records where the shift started.
+        const geo = await getCheckInLocation();
+        setLastGeo(geo);
+        await api.post('/time-clock/check-in', geo.ok ? { location: coordsToPayload(geo.coords) } : undefined);
+      }
       clock.reload();
     } finally {
       setBusy(false);
@@ -112,6 +129,16 @@ export default function EmployeeHome() {
           loading={busy}
           onPress={() => void toggleClock()}
         />
+        {lastGeo ? (
+          <ThemedText
+            type="small"
+            themeColor={lastGeo.ok ? (lastGeo.source === 'override' ? 'accent' : 'success') : 'muted'}
+          >
+            {lastGeo.ok
+              ? `📍 ${lastGeo.source === 'override' ? 'Set location' : 'On-site'} · ${formatCoords(lastGeo.coords)}`
+              : `📍 ${geoReasonLabel(lastGeo.reason)} — checked in without location`}
+          </ThemedText>
+        ) : null}
       </Card>
 
       <View style={styles.tiles}>
